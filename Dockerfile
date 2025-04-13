@@ -1,26 +1,41 @@
+# استخدم صورة PHP الرسمية مع Apache
 FROM php:8.2-apache
 
-# تثبيت الإضافات المطلوبة للـ Laravel
+# تثبيت امتدادات PHP المطلوبة ومكتبات النظام
 RUN apt-get update && apt-get install -y \
-    libzip-dev unzip libpng-dev libjpeg-dev libonig-dev libxml2-dev \
-    && docker-php-ext-install pdo pdo_mysql zip gd mbstring
+    unzip \
+    curl \
+    git \
+    zip \
+    libzip-dev \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    && docker-php-ext-install pdo pdo_mysql zip mbstring exif pcntl bcmath gd
+
+# تثبيت Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# إعداد مجلد العمل داخل الحاوية
+WORKDIR /var/www/html
+
+# نسخ كل ملفات المشروع إلى الحاوية
+COPY . .
+
+# تثبيت الاعتمادات عبر Composer
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+
+# إعداد صلاحيات مجلدات التخزين والبووتستراب
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+# نسخ إعدادات Apache لتوجيه الموقع إلى مجلد public
+COPY ./vhost.conf /etc/apache2/sites-available/000-default.conf
 
 # تفعيل mod_rewrite
 RUN a2enmod rewrite
 
-# نسخ ملفات المشروع
-COPY . /var/www/html
-
-# تغيير DocumentRoot ليشير إلى مجلد public
-RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/public|' /etc/apache2/sites-available/000-default.conf
-
-# السماح بإعادة الكتابة
-RUN sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
-
-# إعطاء الصلاحيات
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html
-
-WORKDIR /var/www/html
-
+# فتح البورت 80
 EXPOSE 80
+
+# أمر التشغيل الأساسي
+CMD ["apache2-foreground"]
